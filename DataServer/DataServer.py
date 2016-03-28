@@ -17,7 +17,7 @@ from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from os import getuid
 from sys import exit
 from textwrap import dedent
-from time import gmtime, localtime, sleep, strftime
+from time import gmtime, sleep, strftime
 
 # start the Redis server if it isn't started already.
 # $ redis-server
@@ -40,12 +40,11 @@ hq_ip = '8.8.8.8'
 # stats
 #server_start_time = strftime("%Y-%m-%d %H:%M:%S", gmtime())
 event_count = 0
+unknowns = {}
 continents_tracked = {}
 countries_tracked = {}
-country_to_code = {}
-ip_to_code = {}
 ips_tracked = {}
-unknowns = {}
+
 
 # @IDEA
 #---------------------------------------------------------
@@ -184,15 +183,9 @@ def shutdown_and_report_stats():
     print('\nCountry Stats...') # report country stats
     for country in countries_tracked:
         print('{}: {}'.format(country, countries_tracked[country]))
-    print('\nCountries to iso_codes...')
-    for key in country_to_code:
-        print('{}: {}'.format(key, country_to_code[key]))
     print('\nIP Stats...') # report IP stats
     for ip in ips_tracked:
         print('{}: {}'.format(ip, ips_tracked[ip]))
-    print('\nIPs to iso_codes...')
-    for key in ip_to_code:
-        print('{}: {}'.format(key, ip_to_code[key]))
     print('\nUnknowns...')
     for key in unknowns:
         print('{}: {}'.format(key, unknowns[key]))
@@ -233,20 +226,8 @@ def merge_dicts(*args):
     return super_dict
 
 
-def track_flags(super_dict, tracking_dict, key1, key2):
-    if key1 in super_dict:
-        if key2 in super_dict:
-            if key1 in tracking_dict:
-                return None
-            else:
-                tracking_dict[super_dict[key1]] = super_dict[key2]
-        else:
-            return None
-    else:
-        return None
-
-
 def track_stats(super_dict, tracking_dict, key):
+    #global unknowns
     if key in super_dict:
         node = super_dict[key]
         if node in tracking_dict:
@@ -267,7 +248,7 @@ def main():
         exit()
 
     global db_path, log_file_out, redis_ip, redis_instance, syslog_path, hq_ip
-    global continents_tracked, countries_tracked, ips_tracked, postal_codes_tracked, event_count, unknown, ip_to_code, country_to_code
+    global continents_tracked, countries_tracked, ips_tracked, postal_codes_tracked, event_count, unknown
 
     args = menu()
 
@@ -309,10 +290,7 @@ def main():
                         track_stats(super_dict, continents_tracked, 'continent')
                         track_stats(super_dict, countries_tracked, 'country')
                         track_stats(super_dict, ips_tracked, 'src_ip')
-                        event_time = strftime("%Y-%m-%d %H:%M:%S", localtime()) # local time
-                        #event_time = strftime("%Y-%m-%d %H:%M:%S", gmtime()) # UTC time
-                        track_flags(super_dict, country_to_code, 'country', 'iso_code')
-                        track_flags(super_dict, ip_to_code, 'src_ip', 'iso_code')
+                        event_time = strftime("%Y-%m-%d %H:%M:%S", gmtime())
 
                         # Append stats to super_dict
                         super_dict['event_count'] = event_count
@@ -321,8 +299,6 @@ def main():
                         super_dict['ips_tracked'] = ips_tracked
                         super_dict['unknowns'] = unknowns
                         super_dict['event_time'] = event_time
-                        super_dict['country_to_code'] = country_to_code
-                        super_dict['ip_to_code'] = ip_to_code
 
                         json_data = json.dumps(super_dict)
                         redis_instance.publish('attack-map-production', json_data)

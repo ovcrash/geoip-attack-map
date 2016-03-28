@@ -173,14 +173,6 @@ class WebSocketChatHandler(tornado.websocket.WebSocketHandler):
             event_time = json_data['event_time']
         else:
             event_time = None
-        if 'country_to_code' in json_data:
-            country_to_code = json_data['country_to_code']
-        else:
-            country_to_code = None
-        if 'ip_to_code' in json_data:
-            ip_to_code = json_data['ip_to_code']
-        else:
-            ip_to_code = None
 
         msg_to_send = {
                         'type': msg_type,
@@ -206,8 +198,6 @@ class WebSocketChatHandler(tornado.websocket.WebSocketHandler):
                         'ips_tracked': ips_tracked,
                         'unknowns': unknowns,
                         'event_time': event_time,
-                        'country_to_code': country_to_code,
-                        'ip_to_code': ip_to_code,
                         }
 
 
