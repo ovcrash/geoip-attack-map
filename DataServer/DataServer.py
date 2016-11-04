@@ -4,14 +4,24 @@
 AUTHOR: Matthew May - mcmay.web@gmail.com
 """
 
+#
+#   Parse CEF Log message to show on GeoIP Attack Map.
+#
+
+
 # Imports
 import json
 #import logging
 import maxminddb
 #import re
 import redis
+import re
+import sys
+import json
+import argparse
+import ipaddress
 
-from const import META, PORTMAP
+from const import META, PORTMAP, SERVICE_RGB
 
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from os import getuid
@@ -28,7 +38,8 @@ redis_ip = '127.0.0.1'
 redis_instance = None
 
 # required input paths
-syslog_path = '/var/log/syslog'
+#syslog_path = '/var/log/syslog'
+syslog_path = '/var/log/arcsight/arcsight.log'
 db_path = '/db-data/GeoLite2-City.mmdb'
 
 # file to log data
@@ -36,6 +47,9 @@ log_file_out = '/var/log/map_data_server.out'
 
 # ip for headquarters
 hq_ip = '8.8.8.8'
+
+#Regex to filter private ip/ broadcast
+IPFilter = re.compile('^(?:10|127|172|224|255|169|100|198\.(?:1[6-9]|2[0-9]|3[01]|0|255|254|100|51)|192\.168)\..*')
 
 # stats
 #server_start_time = strftime("%Y-%m-%d %H:%M:%S", gmtime())
@@ -46,6 +60,136 @@ country_to_code = {}
 ip_to_code = {}
 ips_tracked = {}
 unknowns = {}
+
+cef_keys = set([
+'_cefVer',
+'act',
+'ahost',
+'agt',
+'av',
+'atz'
+'aid',
+'at',
+'app',
+'cnt',
+'customerID',
+'customerURI',
+'dvc',
+'dvchost',
+'dst',
+'dhost',
+'destinationServiceName',
+'destinationGeoCountryCode',
+'destinationGeoLocationInfo',
+'dlong',
+'dlat',
+'destinationGeoPostalCode',
+'destinationGeoRegionCode',
+'dmac',
+'dntdom',
+'dpt',
+'dproc',
+'duid',
+'dpriv',
+'duser',
+'end',
+'eventAnnotationStageUpdateTime',
+'eventAnnotationModificationTime',
+'eventAnnotationAuditTrail',
+'eventAnnotationVersion',
+'eventAnnotationEventId',
+'eventAnnotationFlags',
+'eventAnnotationEndTime',
+'eventAnnotationManagerReceiptTime',
+'fname',
+'fsize',
+'in',
+'msg',
+'out',
+'proto',
+'rt',
+'request',
+'src',
+'shost',
+'smac',
+'sntdom',
+'spt',
+'spriv',
+'suid',
+'suser',
+'start',
+'cat',
+'cs1Label',
+'cs2Label',
+'cs3Label',
+'cs4Label',
+'cs5Label',
+'cs6Label',
+'cn1Label',
+'cn2Label',
+'cn3Label',
+'deviceCustomDate1Label',
+'deviceCustomDate2Label',
+'cs1',
+'cs2',
+'cs3',
+'cs4',
+'cs5',
+'cs6',
+'cn1',
+'cn2',
+'cn3',
+'deviceNtDomain',
+'deviceDnsDomain',
+'deviceTranslatedAddress',
+'deviceMacAddress',
+'deviceCustomeDate1',
+'deviceCustomDate2',
+'destinationDnsDomain',
+'destinationTranslatedAddress',
+'destinationTranslatedPort',
+'deviceDirection',
+'deviceExternalId',
+'deviceFacility',
+'deviceInboundInterface',
+'deviceOutboundInterface',
+'deviceProcessName',
+'deviceZoneID',
+'deviceZoneURI',
+'externalId',
+'fileCreateTime',
+'fileHash',
+'fileId',
+'fileModificationTime',
+'filePath',
+'fileType',
+'oldfileCreateTime',
+'oldfileHash',
+'oldfileId',
+'oldfileModificationTime',
+'oldFilename',
+'oldFilePath',
+'oldfilePermission',
+'oldfsize',
+'oldfileType',
+'mrt',
+'requestClientApplication',
+'requestCookies',
+'requestMethod',
+'sourceDnsDomain',
+'sourceServiceName',
+'sourceTranslatedAddress',
+'sourceTranslatedPort',
+'sourceGeoCountryCode',
+'sourceGeoLocationInfo',
+'slong',
+'slat',
+'sourceGeoRegionCode',
+'sourceZoneURI',
+'sourceZoneID',
+'destinationZoneURI',
+'destinationZoneID'
+])
 
 # @IDEA
 #---------------------------------------------------------
@@ -117,6 +261,10 @@ def get_tcp_udp_proto(src_port, dst_port):
 
     return "OTHER"
 
+def get_service_color(src_proto):
+    src_proto = src_proto.get('protocol')
+    if src_proto in SERVICE_RGB:
+        return SERVICE_RGB[src_proto]
 
 def find_hq_lat_long(hq_ip):
     hq_ip_db_unclean = parse_maxminddb(db_path, hq_ip)
@@ -171,6 +319,83 @@ def parse_syslog(line):
                     'dst_port': dst_port
                     }
         return data_dict
+
+def parse_cef(line):
+    print_keys = set()
+    #infile = None
+
+    #parser = argparse.ArgumentParser(description="Process Mach-O files, perform clustering on them, and spit out Yara signatures.")
+    #parser.add_argument('-a', '--add',
+    #                    help='CSV list of fields to add to the default CEF ones')
+    #parser.add_argument('-p', '--print_keys',
+    #                    help='CSV list of fields to print, defaults to all (JSON-like output)')
+    #parser.add_argument('infile', nargs='?', type=argparse.FileType('r'), default=sys.stdin)
+    #args = parser.parse_args()
+
+    #if args.add:
+    #    add = args.add.replace(' ', '').split(',')
+    #    for a in add:
+    #        cef_keys.add(a)
+    #keys = ['src','dst','dpt']
+    #if args.print_keys:
+        #pk = args.print_keys.replace(' ', '').split(',')
+    #pk = print_keys.replace(' ', '').split(',')
+    #for p in pk:
+    #for p in keys:
+    #  print_keys.add(p)
+
+    #if not args.infile.isatty():
+    #    interactive device
+    #    infile = args.infile
+    #else:
+        #open the file here
+    #    infile = open(args.infile, 'r')
+
+    tokenlist = "|".join(cef_keys)
+    regex = re.compile('('+tokenlist+')=(.*?)\s(?:'+tokenlist+'|$)')
+
+    #for line in infile:
+    parsed = {}
+    tokens = re.split(r'(?<!\\)\|', line)
+    Extension = ''
+    if len(tokens) == 8:
+        Extension = tokens[7]
+    if len(tokens) > 8:
+        print(len(tokens))
+        sys.stderr.write("CEF Parsing error\n")
+        sys.exit(1)
+    parsed['CEFVersion'] = tokens[0].split('CEF:')[1]
+    parsed['DeviceVendor'] = tokens[1]
+    parsed['DeviceProduct'] = tokens[2]
+    parsed['DeviceVersion'] = tokens[3]
+    parsed['SignatureID'] = tokens[4]
+    parsed['Name'] = tokens[5]
+    parsed['Severity'] = tokens[6]
+
+    continue_parsing = False
+    if len(Extension) > 0:
+        continue_parsing = True
+    while continue_parsing:
+        m = re.search(regex, Extension)
+        try:
+            k,v = m.groups()
+            parsed[k] = v
+            Extension = Extension.replace(k+'='+v, '').lstrip()
+        except AttributeError:
+            continue_parsing = False
+
+    o = {}
+    if len(print_keys) > 0:
+        for p in print_keys:
+           o[p] = parsed[p]
+    else:
+        o = parsed
+    #print( json.dumps(o) )
+    return o
+
+    #close input file if one was opened
+    #if args.infile.isatty():
+    #    infile.close()
 
 
 def shutdown_and_report_stats():
@@ -259,7 +484,6 @@ def track_stats(super_dict, tracking_dict, key):
         else:
             unknowns[key] = 1
 
-
 def main():
     if getuid() != 0:
         print('Please run this script as root')
@@ -275,7 +499,7 @@ def main():
     redis_instance = connect_redis(redis_ip)
 
     # find HQ lat/long
-    hq_dict = find_hq_lat_long(hq_ip)
+    #hq_dict = find_hq_lat_long(hq_ip)
 
     # follow/parse/format/publish syslog data
     with open(syslog_path, "r") as syslog_file:
@@ -286,33 +510,59 @@ def main():
                 sleep(.2)
                 syslog_file.seek(where)
             else:
-                syslog_data_dict = parse_syslog(line)
+                #syslog_data_dict = parse_syslog(line)
+                syslog_data_dict = parse_cef(line)
                 if syslog_data_dict:
-                    ip_db_unclean = parse_maxminddb(db_path, syslog_data_dict['src_ip'])
+                    #Check if all key exist in dictionary since not always present.
+                    if not all (k in syslog_data_dict for k in ("dst","spt","dpt","src")):
+                        continue
+                    #else:
+                    #    continue
+                    #Check if dst is private or mulicast
+                    #checkIP = ipaddress.ip(syslog_data_dict['dst'])
+                    #if checkIP.ip_private:
+                    #    continue
+                    if ipaddress.ip_address(syslog_data_dict['dst']).is_multicast:
+                        continue
+                    if IPFilter.match(syslog_data_dict['dst']):
+                        continue
+                    #else:
+                    #    continue
+                    #print('src', syslog_data_dict['src'], 'dst', syslog_data_dict['dst'])
+                    ip_db_unclean = parse_maxminddb(db_path, syslog_data_dict['src'])
+                    hq_dict = find_hq_lat_long(syslog_data_dict['dst'])
                     if ip_db_unclean:
                         event_count += 1
                         ip_db_clean = clean_db(ip_db_unclean)
+                        if not all (k in ip_db_clean for k in ("longitude","latitude")):
+                            print('---------------Skipping')
                         msg_type = {'msg_type': get_msg_type()}
                         proto = {'protocol': get_tcp_udp_proto(
-                                                            syslog_data_dict['src_port'],
-                                                            syslog_data_dict['dst_port']
+                                                            #SourcePort
+                                                            #syslog_data_dict['src_port'],
+                                                            syslog_data_dict['spt'],
+                                                            #DestinationPort
+                                                            #syslog_data_dict['dst_port']
+                                                            syslog_data_dict['dpt']
                                                             )}
+                        #Add color for webPage show.
+                        proto_color = {'color': get_service_color(proto)}
                         super_dict = merge_dicts(
                                                 hq_dict,
                                                 ip_db_clean,
                                                 msg_type,
                                                 proto,
+                                                proto_color,
                                                 syslog_data_dict
                                                 )
-
                         # Track Stats
                         track_stats(super_dict, continents_tracked, 'continent')
                         track_stats(super_dict, countries_tracked, 'country')
-                        track_stats(super_dict, ips_tracked, 'src_ip')
+                        track_stats(super_dict, ips_tracked, 'src')
                         event_time = strftime("%Y-%m-%d %H:%M:%S", localtime()) # local time
                         #event_time = strftime("%Y-%m-%d %H:%M:%S", gmtime()) # UTC time
                         track_flags(super_dict, country_to_code, 'country', 'iso_code')
-                        track_flags(super_dict, ip_to_code, 'src_ip', 'iso_code')
+                        track_flags(super_dict, ip_to_code, 'src', 'iso_code')
 
                         # Append stats to super_dict
                         super_dict['event_count'] = event_count
@@ -323,9 +573,10 @@ def main():
                         super_dict['event_time'] = event_time
                         super_dict['country_to_code'] = country_to_code
                         super_dict['ip_to_code'] = ip_to_code
-
+                        
                         json_data = json.dumps(super_dict)
                         redis_instance.publish('attack-map-production', json_data)
+
 
                         if args.verbose:
                             print(ip_db_unclean)
