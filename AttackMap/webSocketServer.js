@@ -1,3 +1,5 @@
+//Need nodejs and websocket (https://www.npmjs.com/package/websocket)
+
 var server = require('websocket').server, 
 	http = require('http');
 var redis = require("redis"),
