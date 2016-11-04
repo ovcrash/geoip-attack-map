@@ -6,6 +6,7 @@ I have modified the script to ingest CEF format syslog message. You need:
 ```
 1- Forward logs from ArcSight to rsyslog and into a file.
 2- DataServer.py is used to read that file and parse the data and push it into a redis server.
+3- I moved the webSocket server to nodejs, in the file webSocketServer.js i tought that would be faster.
 ```
 
 ### Important
@@ -32,3 +33,4 @@ Run the following commands to install all required dependencies (tested on Ubunt
 
 ### Bugs, Feedback, and Questions
 If you find any errors or bugs, please let me know. Questions and feedback are also welcome, and can be sent to mcmay.web@gmail.com, or open an issue in this repository.
+- Current bug that i need to fix, but since my coding skills are limited i'm having a hard time. The webSocketServer.js is always only eating up RAM on the server, until the thing breaks. Probably a memory leak in the code some where. So you are welcome to fix it! :o)
