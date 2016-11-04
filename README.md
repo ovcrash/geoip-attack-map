@@ -1,6 +1,13 @@
 ### Cyber Security GeoIP Attack Map Visualization
 This geoip attack map visualizer was developed to display network attacks on your organization in real time. The data server follows a syslog file, and parses out source IP, destination IP, source port, and destination port. Protocols are determined via common ports, and the visualizations vary in color based on protocol type. [CLICK HERE](https://www.youtube.com/watch?v=raNp9uA7fvc) for a demo video. This project would not be possible if it weren't for Sam Cappella, who created a cyber defense competition network traffic visualizer for the 2015 Palmetto Cyber Defense Competition. I mainly used his code as a reference, but I did borrow a few functions while creating the display server, and visual aspects of the webapp. I would also like to give special thanks to [Dylan Madisetti](http://www.dylanmadisetti.com/) as well for giving me advice about certain aspects of my implementation.
 
+### Modification
+I have modified the script to ingest CEF format syslog message. You need:
+```
+1- Forward logs from ArcSight to rsyslog and into a file.
+2- DataServer.py is used to read that file and parse the data and push it into a redis server.
+```
+
 ### Important
 This program relies entirely on syslog, and because all appliances format logs differently, you will need to customize the log parsing function(s). If your organization uses a security information and event management system (SIEM), it can probably normalize logs to save you a ton of time writing regex.
 1. Send all syslog to SIEM.
