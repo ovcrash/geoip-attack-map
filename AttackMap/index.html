@@ -30,7 +30,13 @@
 
         <script type="text/javascript">
 
-            var webSock = new WebSocket("ws:/127.0.0.1:8888/websocket");
+        //var webSock = new WebSocket("ws://127.0.0.1:443/websocket");
+	    var webSock = new WebSocket('ws://127.0.0.1:443');
+
+
+	    webSock.onopen = function () {
+			webSock.send('Ping');
+	    };
 
             // link map
             L.mapbox.accessToken = "pk.eyJ1IjoibW1heTYwMSIsImEiOiJjaWgyYWU3NWQweWx2d3ltMDl4eGk5eWY1In0.9YoOkALPP7zaoim34ZITxw";
@@ -44,7 +50,7 @@
 
             // add hq coords
             //var hqLatLng = new L.LatLng(37.3845, -122.0881);
-            var hqLatLng = new L.LatLng(33.936051, -81.048565);
+            var hqLatLng = new L.LatLng(45.5083, -73.5625);
 
             // add circle
             L.circle(hqLatLng, 110000, {
@@ -313,7 +319,7 @@
                 var countryCountList = [msg.countries_tracked,
                                         msg.iso_code];
                 var attackList = [msg.event_time,
-                                  msg.src_ip,
+                                  msg.src,
                                   msg.iso_code,
                                   msg.country,
                                   msg.city,
@@ -329,15 +335,16 @@
                 console.log("Got a websocket message...");
                 try {
                     var msg = JSON.parse(e.data);
-                    console.log(msg);
-                    switch(msg.type) {
+                    //console.log(msg);
+                    switch(msg.msg_type) {
                         case "Traffic":
                             console.log("Traffic!");
 
-                            var srcLatLng = new L.LatLng(msg.src_lat, msg.src_long);
+                            //var srcLatLng = new L.LatLng(msg.src_lat, msg.src_long);
+							var srcLatLng = new L.LatLng(msg.latitude, msg.longitude);
                             var hqPoint = map.latLngToLayerPoint(hqLatLng);
                             var srcPoint = map.latLngToLayerPoint(srcLatLng);
-                            console.log('');
+                            //console.log('');
 
                             addCircle(msg, srcLatLng);
                             handleParticle(msg, srcPoint);
